@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2021 HookedBehemoth
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -31,9 +31,8 @@ using VRC;
 using VRC.SDK3.Avatars.ScriptableObjects;
 using WorldCleanup.UI;
 using ActionMenuApi.Api;
-using harmonyinsta = Harmony.HarmonyInstance;
 
-[assembly: MelonInfo(typeof(WorldCleanup.WorldCleanupMod), "WorldCleanup", "1.0.4", "Behemoth")]
+[assembly: MelonInfo(typeof(WorldCleanup.WorldCleanupMod), "WorldCleanup", "1.0.6", "Behemoth")]
 [assembly: MelonGame("VRChat", "VRChat")]
 
 namespace WorldCleanup {
@@ -45,14 +44,9 @@ namespace WorldCleanup {
         private static Dictionary<string, RefCountedObject<Texture2D>> s_Portraits;
         private static GameObject s_PreviewCaptureCamera;
 
-        private HarmonyLib.Harmony harmony1;
-
         public override void OnApplicationStart() {
             /* Register settings */
             Settings.RegisterConfig();
-            
-            /* Load settings values */
-            Settings.LoadConfig();
 
             /* Load audio settings */
             WorldAudio.LoadConfig();
@@ -63,14 +57,13 @@ namespace WorldCleanup {
             /* Load our custom UI elements */
             UiExpansion.LoadUiObjects();
 
-            if (harmony1 == null)
-            {
-                harmony1 = new HarmonyLib.Harmony(BuildInfo.Name + " OnAvatarInstantiateHook");
-            }
-
-            harmony1.Patch(
-                typeof(VRCAvatarManager).GetMethods().First(mb => mb.Name.StartsWith("Method_Private_Boolean_ApiAvatar_GameObject_")),
-                postfix: new HarmonyLib.HarmonyMethod(typeof(WorldCleanupMod).GetMethod(nameof(OnAvatarInstantiate), BindingFlags.NonPublic | BindingFlags.Static)));
+            /* TODO: Consider switching to operator+ when everyone had to update the assembly unhollower */
+            /*       The current solution might be prefereable so we are always first */
+            // VRCAvatarManager.field_Private_Static_Action_3_Player_GameObject_VRC_AvatarDescriptor_0 += (Il2CppSystem.Action<Player, GameObject, VRC.SDKBase.VRC_AvatarDescriptor>)OnAvatarInstantiate;
+            VRCAvatarManager.field_Private_Static_Action_3_Player_GameObject_VRC_AvatarDescriptor_0 = Il2CppSystem.Delegate.Combine(
+                (Il2CppSystem.Action<Player, GameObject, VRC.SDKBase.VRC_AvatarDescriptor>)OnAvatarInstantiate,
+                VRCAvatarManager.field_Private_Static_Action_3_Player_GameObject_VRC_AvatarDescriptor_0
+            ).Cast<Il2CppSystem.Action<Player, GameObject, VRC.SDKBase.VRC_AvatarDescriptor>>();
 
             /* Register async, awaiting network manager */
             MelonCoroutines.Start(RegisterJoinLeaveNotifier());
@@ -94,7 +87,7 @@ namespace WorldCleanup {
                 Parameters._floatPropertySetterDelegate = Marshal.GetDelegateForFunctionPointer<Parameters.FloatPropertySetterDelegate>(*(IntPtr*)(void*)param_prop_float_set);
             }
 
-            VRCActionMenuPage.AddSubMenu(ActionMenuPage.Main, "Player Toggles", () => {
+            AMUtils.AddToModsFolder("Player Toggles", () => {
                 /* Filter inactive avatar objects */
                 s_PlayerList = s_PlayerList.Where(o => o.Value).ToDictionary(o => o.Key, o => o.Value);
 
@@ -125,8 +118,7 @@ namespace WorldCleanup {
                         if (entry.Value == null || !entry.Value.active)
                             return;
 
-                        var controller = manager.field_Private_AvatarPlayableController_0;
-                        var parameters = controller.field_Private_Dictionary_2_Int32_AvatarParameter_0.Get_All_AvatarParameters();
+                        var parameters = manager.GetAllAvatarParameters();
                         var filtered = Parameters.FilterDefaultParameters(parameters);
                         var avatar_descriptor = manager.prop_VRCAvatarDescriptor_0;
 
@@ -146,13 +138,13 @@ namespace WorldCleanup {
 
                             void FourAxisControl(VRCExpressionsMenu.Control control, Action<Vector2> callback) {
                                 CustomSubMenu.AddFourAxisPuppet(
-                                    control.name,
+                                    control.TruncatedName(),
                                     callback,
                                     icon: control.icon ?? default_expression,
-                                    topButtonText: control.labels[0]?.name ?? "Up",
-                                    rightButtonText: control.labels[1]?.name ?? "Right",
-                                    downButtonText: control.labels[2]?.name ?? "Down",
-                                    leftButtonText: control.labels[3]?.name ?? "Left");
+                                    topButtonText: control.labels[0]?.TruncatedName() ?? "Up",
+                                    rightButtonText: control.labels[1]?.TruncatedName() ?? "Right",
+                                    downButtonText: control.labels[2]?.TruncatedName() ?? "Down",
+                                    leftButtonText: control.labels[3]?.TruncatedName() ?? "Left");
                             }
 
                             foreach (var control in expressions_menu.controls) {
@@ -165,13 +157,13 @@ namespace WorldCleanup {
                                     case VRCExpressionsMenu.Control.ControlType.Toggle: {
                                         var param = FindParameter(control.parameter.name);
                                         var current_value = param.GetValue();
-                                        var default_value = avatar_descriptor.expressionParameters.FindParameter(control.parameter.name).defaultValue;
+                                        var default_value = avatar_descriptor.expressionParameters.FindParameter(control.parameter.name)?.defaultValue ?? 0f;
                                         var target_value = control.value;
                                         void SetIntFloat(bool state) => param.SetValue(state ? target_value : default_value);
                                         void SetBool(bool state) => param.SetValue(state ? 1f : 0f);
 
                                         CustomSubMenu.AddToggle(
-                                            control.name,
+                                            control.TruncatedName(),
                                             current_value == target_value,
                                             param.prop_EnumNPublicSealedvaUnBoInFl5vUnique_0 == AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Bool ? SetBool : SetIntFloat,
                                             icon: control.icon ?? default_expression);
@@ -179,7 +171,7 @@ namespace WorldCleanup {
                                     }
 
                                     case VRCExpressionsMenu.Control.ControlType.SubMenu: {
-                                        CustomSubMenu.AddSubMenu(control.name, () => ExpressionSubmenu(control.subMenu), icon: control.icon ?? default_expression);
+                                        CustomSubMenu.AddSubMenu(control.TruncatedName(), () => ExpressionSubmenu(control.subMenu), icon: control.icon ?? default_expression);
                                         break;
                                     }
 
@@ -209,7 +201,7 @@ namespace WorldCleanup {
 
                                     case VRCExpressionsMenu.Control.ControlType.RadialPuppet: {
                                         var param = FindParameter(control.subParameters[0]?.name);
-                                        CustomSubMenu.AddRestrictedRadialPuppet(control.name, param.SetValue, startingValue: param.GetValue(), icon: control.icon ?? default_expression);
+                                        CustomSubMenu.AddRestrictedRadialPuppet(control.TruncatedName(), param.SetValue, startingValue: param.GetValue(), icon: control.icon ?? default_expression);
                                         break;
                                     }
                                 }
@@ -236,9 +228,6 @@ namespace WorldCleanup {
 
             /* Flush audio config */
             WorldAudio.FlushConfig();
-
-            /* Store settings */
-            Settings.FlushConfig();
         }
 
         public override void OnPreferencesLoaded()
@@ -246,11 +235,8 @@ namespace WorldCleanup {
 
         public override void OnPreferencesSaved()
             => LoadAndApplyPreferences();
-        
-        private void LoadAndApplyPreferences() {
-            /* Load settings values */
-            Settings.LoadConfig();
 
+        private void LoadAndApplyPreferences() {
             /* Load audio settings */
             WorldAudio.LoadConfig();
             WorldAudio.ApplySettingsToAll();
@@ -273,9 +259,9 @@ namespace WorldCleanup {
                 s_PreviewCaptureCamera.SetActive(false);
             }
 
-            var disable_shadows = Settings.s_DisableLights;
-            var disable_ppv = Settings.s_DisablePostProcessing;
-            var disable_mirrors = Settings.s_DisableMirrors;
+            var disable_shadows = Settings.s_DisableLights.Value;
+            var disable_ppv = Settings.s_DisablePostProcessing.Value;
+            var disable_mirrors = Settings.s_DisableMirrors.Value;
             /* Iterate root objects */
             foreach (var sceneObject in active_scene.GetRootGameObjects()) {
                 /* Store all lights */
@@ -306,20 +292,17 @@ namespace WorldCleanup {
             }
         }
 
-
-        private static void OnAvatarInstantiate(VRCAvatarManager __instance, VRC.Core.ApiAvatar __0, GameObject __1) {
-            if (__instance == null || __0 == null || __1 == null)
-                return;
-
-            var manager = __instance;
-            var avatar = manager.prop_GameObject_0;
+        private static void OnAvatarInstantiate(Player player, GameObject avatar, VRC_AvatarDescriptor descriptor) {
+            var manager = player._vrcplayer.prop_VRCAvatarManager_0;
             var player_name = avatar.transform.root.GetComponentInChildren<VRCPlayer>().prop_String_0;
             s_PlayerList[player_name] = avatar;
+
             Parameters.ApplyParameters(manager);
 
             var avatar_id = avatar.GetComponent<VRC.Core.PipelineManager>().blueprintId;
+
             var destroy_listener = avatar.AddComponent<UIExpansionKit.Components.DestroyListener>();
-            var parameters = manager.GetAvatarParameters();
+            var parameters = manager.GetAvatarParameters().ToArray();
             destroy_listener.OnDestroyed += () => {
                 /* Unlock expression parameters */
                 foreach (var parameter in parameters) parameter.Unlock();
@@ -327,6 +310,7 @@ namespace WorldCleanup {
                 /* Decrement ref count on avatar portrait */
                 if (s_Portraits.ContainsKey(avatar_id)) if (s_Portraits[avatar_id].Decrement()) s_Portraits.Remove(avatar_id);
             };
+
             /* Take preview image for action menu */
             /* Note: in this state, everyone should be t-posing and your own head is still there */
             if (manager.HasCustomExpressions()) {
@@ -337,7 +321,6 @@ namespace WorldCleanup {
                     s_PreviewCaptureCamera.SetActive(true);
 
                     /* Move camera infront of head */
-                    var descriptor = manager.prop_VRCAvatarDescriptor_0;
                     var head_height = descriptor.ViewPosition.y;
                     var head = avatar.transform.position + new Vector3(0, head_height, 0);
                     var target = head + avatar.transform.forward * 0.3f;
@@ -390,7 +373,7 @@ namespace WorldCleanup {
 
         private void MainMenu() {
             var settings_menu = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
-            settings_menu.AddLabel("\n World Cleanup");
+            settings_menu.AddHeader("World Cleanup");
 
             /* Light shadows */
             if (s_Lights.Count() > 0) {
@@ -403,8 +386,8 @@ namespace WorldCleanup {
                 }, (restore) => {
                     foreach (var (light, original) in s_Lights)
                         light.shadows = restore ? original : LightShadows.None;
-                    Settings.s_DisableLights = !restore;
-                }, () => !Settings.s_DisableLights, false);
+                    Settings.s_DisableLights.Value = !restore;
+                }, () => !Settings.s_DisableLights.Value, false);
             } else {
                 settings_menu.AddLabel("No lights found on this map");
             }
@@ -420,8 +403,8 @@ namespace WorldCleanup {
                 }, (restore) => {
                     foreach (var (volume, original) in s_PostProcessingVolumes)
                         volume.gameObject.active = restore ? original : false;
-                    Settings.s_DisablePostProcessing = !restore;
-                }, () => !Settings.s_DisablePostProcessing, false);
+                    Settings.s_DisablePostProcessing.Value = !restore;
+                }, () => !Settings.s_DisablePostProcessing.Value, false);
             } else {
                 settings_menu.AddLabel("No Post Processing found on this map");
             }
@@ -437,8 +420,8 @@ namespace WorldCleanup {
                 }, (enable) => {
                     foreach (var mirror in s_Mirrors)
                         mirror.enabled = enable;
-                    Settings.s_DisableMirrors = !enable;
-                }, () => !Settings.s_DisableMirrors, false);
+                    Settings.s_DisableMirrors.Value = !enable;
+                }, () => !Settings.s_DisableMirrors.Value, false);
             } else {
                 settings_menu.AddLabel("No Mirrors found on this map");
             }
@@ -448,6 +431,7 @@ namespace WorldCleanup {
                 var player = Networking.LocalPlayer;
 
                 var player_menu = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
+                player_menu.AddHeader("Player Mod Settings");
 
                 player_menu.AddFloatDiffListItem("Jump Impulse", player.SetJumpImpulse, player.GetJumpImpulse);
                 player_menu.AddFloatDiffListItem("Run Speed", player.SetRunSpeed, player.GetRunSpeed);
@@ -463,7 +447,7 @@ namespace WorldCleanup {
             WorldAudio.RegisterSettings(settings_menu, MainMenu);
 
             /* Update interval */
-            settings_menu.AddSliderListItem("Update interval (0-3s)", (value) => { Updater.s_UpdateInterval = Settings.s_UpdateInterval = value; }, () => Updater.s_UpdateInterval, 0f, 3f);
+            settings_menu.AddSliderListItem("Update interval (0-3s)", (value) => { Settings.s_UpdateInterval.Value = value; }, () => Settings.s_UpdateInterval.Value, 0f, 3f);
 
             settings_menu.AddSimpleButton("Back", settings_menu.Hide);
 
@@ -483,6 +467,8 @@ namespace WorldCleanup {
             s_PlayerList = s_PlayerList.Where(o => o.Value).ToDictionary(o => o.Key, o => o.Value);
 
             var player_list = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
+            player_list.AddHeader("Player List");
+
             foreach (var entry in s_PlayerList)
                 player_list.AddSimpleButton(entry.Key, () => { AvatarList(entry.Key, false); });
 
@@ -498,6 +484,8 @@ namespace WorldCleanup {
             var manager = avatar.GetComponentInParent<VRCAvatarManager>();
 
             var avatar_list = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
+            avatar_list.AddHeader(player_name);
+
             {
                 /* Animator Toggle */
                 var animator = avatar.GetComponent<Animator>();
@@ -514,7 +502,7 @@ namespace WorldCleanup {
                 if (smr.Count() > 0) {
                     avatar_list.AddSimpleButton($"SkinnedMeshRenderer: {smr.Count()}", () => {
                         var mesh_list = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
-                        mesh_list.AddLabel("SkinnedMeshRenderers");
+                        mesh_list.AddHeader("SkinnedMeshRenderers");
                         foreach (var renderer in smr) {
                             void set_value(bool state) { renderer.gameObject.active = renderer.enabled = state; }
                             bool get_value() { return renderer.enabled && renderer.gameObject.active; };
@@ -548,7 +536,7 @@ namespace WorldCleanup {
                 void ShowGenericRendererToggleList(string type, IEnumerable<Renderer> list) {
                     var mesh_list = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
                     if (type != null)
-                        mesh_list.AddLabel(type);
+                        mesh_list.AddHeader(type);
                     foreach (var mesh in list) {
                         var name = type != null ? mesh.gameObject.name : $"{mesh.GetIl2CppType().Name}: {mesh.gameObject.name}";
                         mesh_list.AddToggleListItem(name, (state) => { mesh.enabled = mesh.gameObject.active = state; }, () => mesh.enabled && mesh.gameObject.active, true);
@@ -575,11 +563,10 @@ namespace WorldCleanup {
             {
                 /* Ignore SDK2 & avatars w/o custom expressions */
                 if (manager.HasCustomExpressions()) {
-                    var controller = manager.field_Private_AvatarPlayableController_0;
-                    var parameters = controller.field_Private_Dictionary_2_Int32_AvatarParameter_0.Get_All_AvatarParameters();
+                    var parameters = manager.GetAllAvatarParameters();
                     var filtered = Parameters.FilterDefaultParameters(parameters);
 
-                    var avatar_descriptor = controller.field_Private_VRCAvatarDescriptor_0;
+                    var avatar_descriptor = manager.prop_VRCAvatarDescriptor_0;
 
                     avatar_list.AddSimpleButton($"Parameter Menu", () => {
                         /* Unlock all parameters to prevent state machine tomfoolery */
@@ -603,13 +590,13 @@ namespace WorldCleanup {
                                     case VRCExpressionsMenu.Control.ControlType.Toggle: {
                                         var param = FindParameter(control.parameter.name);
                                         var current_value = param.GetValue();
-                                        var default_value = avatar_descriptor.expressionParameters.FindParameter(control.parameter.name).defaultValue;
+                                        var default_value = avatar_descriptor.expressionParameters.FindParameter(control.parameter.name)?.defaultValue ?? 0f;
                                         var target_value = control.value;
                                         void SetIntFloat(bool state) => param.SetValue(state ? target_value : default_value);
                                         void SetBool(bool state) => param.SetValue(state ? 1f : 0f);
 
                                         list.AddToggleListItem(
-                                            control.name,
+                                            control.TruncatedName(),
                                             param.prop_EnumNPublicSealedvaUnBoInFl5vUnique_0 == AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Bool ? SetBool : SetIntFloat,
                                             () => { return current_value == target_value; },
                                             true);
@@ -617,8 +604,9 @@ namespace WorldCleanup {
                                     }
 
                                     case VRCExpressionsMenu.Control.ControlType.SubMenu: {
-                                        list.AddSimpleButton(control.name, () => {
+                                        list.AddSimpleButton(control.TruncatedName(), () => {
                                             var sub_menu = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
+                                            sub_menu.AddHeader(control.TruncatedName());
 
                                             ExpressionSubmenu(sub_menu, control.subMenu);
 
@@ -630,12 +618,12 @@ namespace WorldCleanup {
 
                                     case VRCExpressionsMenu.Control.ControlType.RadialPuppet: {
                                         var param = FindParameter(control.subParameters[0].name);
-                                        list.AddSliderListItem(control.name, param.SetValue, param.GetValue, 0, 1);
+                                        list.AddSliderListItem(control.TruncatedName(), param.SetValue, param.GetValue, 0, 1);
                                         break;
                                     }
 
                                     default:
-                                        list.AddLabel($"\n\n{control.name}: {control.type} unsupported");
+                                        list.AddLabel($"\n\n{control.TruncatedName()}: {control.type} unsupported");
                                         break;
                                 }
                             }
@@ -647,7 +635,7 @@ namespace WorldCleanup {
                         menu_list.AddSimpleButton($"Raw Parameters: {filtered.Count}", () => {
                             var parameter_list = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
                             foreach (var parameter in filtered) {
-                                var name = parameter.field_Private_String_0;
+                                var name = parameter.TruncatedName();
                                 var type = parameter.field_Private_EnumNPublicSealedvaUnBoInFl5vUnique_0;
                                 switch (type) {
                                     case AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Bool:
