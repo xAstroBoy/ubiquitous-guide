@@ -94,7 +94,6 @@
     <Compile Include="RefCountedObject.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="Sigh.cs" />
-    <Compile Include="UI\UIEventSyncExtensions.cs" />
     <Compile Include="UI\UiExpansion.cs" />
     <Compile Include="UI\Updater.cs" />
     <Compile Include="WorldAudio.cs" />
