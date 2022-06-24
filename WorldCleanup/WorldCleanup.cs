@@ -32,7 +32,7 @@ using VRC.SDK3.Avatars.ScriptableObjects;
 using WorldCleanup.UI;
 using ActionMenuApi.Api;
 
-[assembly: MelonInfo(typeof(WorldCleanup.WorldCleanupMod), "WorldCleanup", "1.0.6", "Behemoth")]
+[assembly: MelonInfo(typeof(WorldCleanup.WorldCleanupMod), "WorldCleanup", "1.0.7", "Behemoth")]
 [assembly: MelonGame("VRChat", "VRChat")]
 
 namespace WorldCleanup {
@@ -87,7 +87,7 @@ namespace WorldCleanup {
                 Parameters._floatPropertySetterDelegate = Marshal.GetDelegateForFunctionPointer<Parameters.FloatPropertySetterDelegate>(*(IntPtr*)(void*)param_prop_float_set);
             }
 
-            AMUtils.AddToModsFolder("Player Toggles", () => {
+                VRCActionMenuPage.AddSubMenu(ActionMenuPage.Main, "Player Toggles", () => {
                 /* Filter inactive avatar objects */
                 s_PlayerList = s_PlayerList.Where(o => o.Value).ToDictionary(o => o.Key, o => o.Value);
 
@@ -165,7 +165,7 @@ namespace WorldCleanup {
                                         CustomSubMenu.AddToggle(
                                             control.TruncatedName(),
                                             current_value == target_value,
-                                            param.prop_EnumNPublicSealedvaUnBoInFl5vUnique_0 == AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Bool ? SetBool : SetIntFloat,
+                                            param.Get_ParameterType() == AvatarParameter.ParameterType.Bool ? SetBool : SetIntFloat,
                                             icon: control.icon ?? default_expression);
                                         break;
                                     }
@@ -597,7 +597,7 @@ namespace WorldCleanup {
 
                                         list.AddToggleListItem(
                                             control.TruncatedName(),
-                                            param.prop_EnumNPublicSealedvaUnBoInFl5vUnique_0 == AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Bool ? SetBool : SetIntFloat,
+                                            param.Get_ParameterType() == AvatarParameter.ParameterType.Bool ? SetBool : SetIntFloat,
                                             () => { return current_value == target_value; },
                                             true);
                                         break;
@@ -636,17 +636,17 @@ namespace WorldCleanup {
                             var parameter_list = ExpansionKitApi.CreateCustomQuickMenuPage(LayoutDescription.WideSlimList);
                             foreach (var parameter in filtered) {
                                 var name = parameter.TruncatedName();
-                                var type = parameter.field_Private_EnumNPublicSealedvaUnBoInFl5vUnique_0;
+                                var type = parameter.Get_ParameterType();
                                 switch (type) {
-                                    case AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Bool:
+                                    case AvatarParameter.ParameterType.Bool:
                                         parameter_list.AddToggleListItem(name, parameter.SetBoolProperty, () => parameter.prop_Boolean_0, true);
                                         break;
 
-                                    case AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Int:
+                                    case AvatarParameter.ParameterType.Int:
                                         parameter_list.AddIntDiffListItem(name, parameter.SetIntProperty, () => parameter.prop_Int32_1);
                                         break;
 
-                                    case AvatarParameter.EnumNPublicSealedvaUnBoInFl5vUnique.Float:
+                                    case AvatarParameter.ParameterType.Float:
                                         parameter_list.AddSliderListItem(name, parameter.SetFloatProperty, () => parameter.prop_Single_0);
                                         break;
 
